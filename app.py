@@ -175,7 +175,9 @@ if os.path.exists(history_file):
             </div>
         </div>
         """, unsafe_allow_html=True)
-    except:
+    except Exception as e:
+        # Si le fichier est corrompu, on l'affiche pas les stats
+        st.warning("⚠️ Le fichier d'historique est corrompu. Les statistiques ne peuvent pas être affichées.")
         pass
 
 # Bouton de génération centré
@@ -220,7 +222,7 @@ if shared_link and file_title and file_type and project_name and dtr and indice:
         
         col1, col2, col3 = st.columns([1, 2, 1])
         with col2:
-            st.image(qr_image, caption="QR Code prêt à être partagé", use_column_width=True)
+            st.image(qr_image, caption="QR Code prêt à être partagé", use_container_width=True)
 
         # Sauvegarde image
         qr_filename = f"{file_title.replace(' ', '_')}_QR.png"
@@ -239,16 +241,6 @@ if shared_link and file_title and file_type and project_name and dtr and indice:
                     use_container_width=True
                 )
         
-        with col2:
-            with open(history_file, "rb") as f:
-                st.download_button(
-                    label="📊 Télécharger Excel",
-                    data=f,
-                    file_name=history_file,
-                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                    use_container_width=True
-                )
-
         # Création Excel si nécessaire
         if not os.path.exists(history_file):
             wb = Workbook()
@@ -256,10 +248,20 @@ if shared_link and file_title and file_type and project_name and dtr and indice:
             ws.append(["Nom du projet", "DTR", "Indice", "Titre", "Type", "Lien partagé", "QR Code"])
             wb.save(history_file)
 
-        # Chargement Excel
-        wb = load_workbook(history_file)
-        ws = wb.active
-        next_row = ws.max_row + 1
+        # Chargement Excel avec gestion d'erreur
+        try:
+            wb = load_workbook(history_file)
+            ws = wb.active
+            next_row = ws.max_row + 1
+        except Exception as e:
+            # Si le fichier est corrompu, on le supprime et on en crée un nouveau
+            st.warning("Le fichier Excel existant est corrompu. Création d'un nouveau fichier...")
+            if os.path.exists(history_file):
+                os.remove(history_file)
+            wb = Workbook()
+            ws = wb.active
+            ws.append(["Nom du projet", "DTR", "Indice", "Titre", "Type", "Lien partagé", "QR Code"])
+            next_row = 2
 
         # Données texte
         ws.cell(row=next_row, column=1).value = project_name
@@ -309,6 +311,19 @@ if shared_link and file_title and file_type and project_name and dtr and indice:
                 ✅ QR Code enregistré avec succès dans l'historique !
             </div>
             """, unsafe_allow_html=True)
+            
+            # Bouton de téléchargement Excel après sauvegarde réussie
+            with col2:
+                if os.path.exists(history_file):
+                    with open(history_file, "rb") as f:
+                        st.download_button(
+                            label="📊 Télécharger Excel",
+                            data=f,
+                            file_name=history_file,
+                            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                            use_container_width=True
+                        )
+            
             st.rerun()
         except PermissionError:
             st.markdown("""
@@ -362,14 +377,17 @@ if os.path.exists(history_file):
         # Bouton de téléchargement Excel toujours visible
         col1, col2, col3 = st.columns([1, 2, 1])
         with col2:
-            with open(history_file, "rb") as f:
-                st.download_button(
-                    label="📊 Télécharger l'historique Excel",
-                    data=f,
-                    file_name=history_file,
-                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                    use_container_width=True
-                )
+            if os.path.exists(history_file):
+                with open(history_file, "rb") as f:
+                    st.download_button(
+                        label="📊 Télécharger l'historique Excel",
+                        data=f,
+                        file_name=history_file,
+                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                        use_container_width=True
+                    )
+            else:
+                st.warning("Aucun fichier d'historique disponible.")
         
         # Affichage de l'historique dans une carte moderne
         st.markdown("""
@@ -443,7 +461,16 @@ if os.path.exists(history_file):
                     else:
                         st.warning("QR code non trouvé pour ce titre.")
     except Exception as e:
-        st.warning(f"Erreur lors de la lecture de l'historique : {e}")
+        st.markdown("""
+        <div class="warning-message">
+            ❌ Le fichier d'historique est corrompu. Il sera supprimé et recréé lors de la prochaine génération de QR Code.
+        </div>
+        """, unsafe_allow_html=True)
+        # Supprimer le fichier corrompu
+        try:
+            os.remove(history_file)
+        except:
+            pass
 else:
     st.markdown("""
     <div class="card">
